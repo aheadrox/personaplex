@@ -16,10 +16,11 @@ WORKDIR /app/moshi/
 COPY moshi/ /app/moshi/
 RUN uv venv /app/moshi/.venv --python 3.12
 RUN uv sync
+RUN uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu130
 
 RUN mkdir -p /app/ssl
 
 EXPOSE 8998
 
 ENTRYPOINT []
-CMD ["/app/moshi/.venv/bin/python", "-m", "moshi.server", "--ssl", "/app/ssl"]
+CMD ["/app/moshi/.venv/bin/python", "-m", "moshi.server"]
