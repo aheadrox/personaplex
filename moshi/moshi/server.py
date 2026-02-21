@@ -264,8 +264,6 @@ class ServerState:
             if seed is not None and seed != -1:
                 seed_all(seed)
 
-            opus_writer = sphn.OpusStreamWriter(self.mimi.sample_rate)
-            opus_reader = sphn.OpusStreamReader(self.mimi.sample_rate)
             self.mimi.reset_streaming()
             self.other_mimi.reset_streaming()
             self.lm_gen.reset_streaming()
@@ -291,7 +289,9 @@ class ServerState:
             if await is_alive():
                 await ws.send_bytes(b"\x00")
                 clog.log("info", "sent handshake bytes")
-                # Clean cancellation manager
+                # Create codec objects right before tasks to avoid stale channels
+                opus_writer = sphn.OpusStreamWriter(self.mimi.sample_rate)
+                opus_reader = sphn.OpusStreamReader(self.mimi.sample_rate)
                 t_recv = asyncio.create_task(recv_loop(), name="recv_loop")
                 t_opus = asyncio.create_task(opus_loop(), name="opus_loop")
                 t_send = asyncio.create_task(send_loop(), name="send_loop")
