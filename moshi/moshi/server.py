@@ -209,7 +209,7 @@ class ServerState:
                     return
                 await asyncio.sleep(0.001)
                 pcm = opus_reader.read_pcm()
-                if pcm.shape[-1] == 0:
+                if pcm is None or pcm.shape[-1] == 0:
                     continue
                 if all_pcm_data is None:
                     all_pcm_data = pcm
@@ -295,6 +295,10 @@ class ServerState:
                 ]
 
                 done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+                # Log exceptions from completed tasks
+                for task in done:
+                    if not task.cancelled() and task.exception() is not None:
+                        clog.log("error", f"Task failed: {task.exception()}")
                 # Force-kill remaining tasks
                 for task in pending:
                     task.cancel()
