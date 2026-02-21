@@ -42,6 +42,7 @@ from huggingface_hub import hf_hub_download
 import numpy as np
 import sentencepiece
 import sphn
+import importlib.metadata as _meta
 import torch
 import random
 
@@ -194,7 +195,10 @@ class ServerState:
                     kind = message[0]
                     if kind == 1:  # audio
                         payload = message[1:]
-                        opus_reader.append_bytes(payload)
+                        try:
+                            opus_reader.append_bytes(payload)
+                        except Exception as e:
+                            clog.log("error", f"opus_reader.append_bytes failed: {e}")
                     else:
                         clog.log("warning", f"unknown message kind {kind}")
             finally:
@@ -288,17 +292,21 @@ class ServerState:
                 await ws.send_bytes(b"\x00")
                 clog.log("info", "sent handshake bytes")
                 # Clean cancellation manager
-                tasks = [
-                    asyncio.create_task(recv_loop()),
-                    asyncio.create_task(opus_loop()),
-                    asyncio.create_task(send_loop()),
-                ]
+                t_recv = asyncio.create_task(recv_loop(), name="recv_loop")
+                t_opus = asyncio.create_task(opus_loop(), name="opus_loop")
+                t_send = asyncio.create_task(send_loop(), name="send_loop")
+                tasks = [t_recv, t_opus, t_send]
 
                 done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-                # Log exceptions from completed tasks
+                # Log which task exited and why
                 for task in done:
-                    if not task.cancelled() and task.exception() is not None:
-                        clog.log("error", f"Task failed: {task.exception()}")
+                    name = task.get_name()
+                    if task.cancelled():
+                        clog.log("info", f"Task {name} was cancelled")
+                    elif task.exception() is not None:
+                        clog.log("error", f"Task {name} failed: {task.exception()}", exc_info=task.exception())
+                    else:
+                        clog.log("info", f"Task {name} completed normally")
                 # Force-kill remaining tasks
                 for task in pending:
                     task.cancel()
@@ -432,6 +440,10 @@ def main():
     # No worries about double-counting since config.json will be cached the second time
     hf_hub_download(args.hf_repo, "config.json")
 
+    try:
+        logger.info(f"sphn version: {_meta.version('sphn')}")
+    except Exception:
+        logger.info("sphn version: unknown")
     logger.info("loading mimi")
     if args.mimi_weight is None:
         args.mimi_weight = hf_hub_download(args.hf_repo, loaders.MIMI_NAME)
